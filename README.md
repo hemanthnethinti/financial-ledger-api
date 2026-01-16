@@ -1,5 +1,20 @@
  # Financial Ledger API
 
+## Verification Summary
+
+This backend was verified to ensure:
+- Double-entry bookkeeping (balanced DEBIT/CREDIT)
+- Immutable ledger (append-only)
+- Overdraft prevention
+- ACID-compliant transactions (BEGIN/COMMIT/ROLLBACK)
+- Safe concurrent transfers (row-level locks with ordered locking)
+
+Verification included manual API tests, database inspection, and simulated failure/concurrency scenarios. All critical requirements were validated successfully.
+
+### Docker Completion (quick check)
+- `docker-compose ps` shows services `Up` (and `healthy` if configured)
+- Recent `docker-compose logs --tail=50` for `api` and `db` show no errors
+
 Double-Entry Bookkeeping | ACID-Safe | Dockerized
 
 ## 1. Overview
