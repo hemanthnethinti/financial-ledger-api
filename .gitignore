@@ -19,3 +19,5 @@ Thumbs.db
 
 # Docker runtime data (volumes are recreated)
 pgdata/
+
+coverage/
