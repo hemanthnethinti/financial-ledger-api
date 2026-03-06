@@ -1,252 +1,182 @@
- # Financial Ledger API
+# Financial Ledger API
+## Overview
 
-## Verification Summary
+The API supports account creation, deposits, withdrawals, and transfers. Instead of storing mutable balances on account rows, it derives balance from ledger entries (`CREDIT - DEBIT`) so financial state can be reconstructed from history.
 
-This backend was verified to ensure:
-- Double-entry bookkeeping (balanced DEBIT/CREDIT)
-- Immutable ledger (append-only)
-- Overdraft prevention
-- ACID-compliant transactions (BEGIN/COMMIT/ROLLBACK)
-- Safe concurrent transfers (row-level locks with ordered locking)
+## Key Features
 
-Verification included manual API tests, database inspection, and simulated failure/concurrency scenarios. All critical requirements were validated successfully.
+- Account creation with strict Joi validation.
+- Deposit, withdrawal, and transfer operations.
+- Double-entry transfer posting (`DEBIT` + `CREDIT`).
+- Balance computed from immutable ledger entries.
+- Overdraft prevention on debit paths.
+- Transactional write safety (`BEGIN`/`COMMIT`/`ROLLBACK`).
+- Row-level locking for transfer consistency (`FOR UPDATE`, ordered locking).
+- Centralized error handling and validation responses.
 
-### Docker Completion (quick check)
-- `docker-compose ps` shows services `Up` (and `healthy` if configured)
-- Recent `docker-compose logs --tail=50` for `api` and `db` show no errors
+## Tech Stack
 
-Double-Entry Bookkeeping | ACID-Safe | Dockerized
+- Language: JavaScript (Node.js)
+- Framework: Express 5
+- Validation: Joi
+- Database: PostgreSQL 15
+- Database driver: `pg`
+- Testing: Jest, Supertest
+- Infrastructure: Docker, Docker Compose
+- Messaging systems: none
 
-## 1. Overview
+## Project Structure
 
-This project implements a robust financial ledger API based on double-entry bookkeeping principles.
-It is designed as the backend core of a mock banking system, with a strong emphasis on data integrity, auditability, and correctness.
-
-Unlike simple CRUD applications, this system treats the ledger as the source of truth. Account balances are never stored and are instead calculated dynamically from immutable ledger entries.
-
- ## 2. Key Concepts Implemented
-
-  - Double-entry bookkeeping
-
-  - Immutable ledger design
-
-  - ACID-compliant database transactions
-
-  - Row-level locking for concurrency safety
-
-  - Overdraft prevention
-
-  - Deterministic balance calculation
-
-  - Docker-based reproducible setup
-
- ## 3. Technology Stack
-
-  - Backend: Node.js, Express.js
-
-  - Database: PostgreSQL 15
-
-  - Containerization: Docker, Docker Compose
-
-  - Database Access: pg (node-postgres)
-
-  - Testing Tool: Postman
-
-# 4. Project Structure
-
-```bash
-financial-ledger-api/
-│
+```text
+.
 ├── src/
-│   ├── controllers/      # HTTP layer (placeholders for future refactor)
-│   ├── services/         # Business logic layer (conceptual)
-│   ├── repositories/     # Data access layer (conceptual)
-│   ├── models/           # Entity representations
-│   ├── routes/           # API routing layer
-│   ├── database/
-│   │   └── db.js         # PostgreSQL connection
-│   └── app.js            # Application entry point
-│
+│   ├── app.js                     # Express composition (middleware, routes)
+│   ├── server.js                  # Process bootstrap + DB connectivity check
+│   ├── routes/                    # HTTP route definitions
+│   ├── controllers/               # Request/response handlers
+│   ├── services/                  # Business logic + transaction orchestration
+│   ├── database/                  # pg pool + repository SQL
+│   ├── middleware/                # Error and async middleware
+│   └── utils/                     # Validation schemas and shared constants
+├── migrations/                    # SQL migration scripts
 ├── docker/
-│   └── init.sql          # Auto-run database migrations
-│
-├── migrations/           # SQL schema definitions
-├── tests/                # Test placeholders
-├── docker-compose.yml
+│   └── init.sql                   # Container DB initialization script
+├── tests/
+│   └── api.test.js                # Integration tests
 ├── Dockerfile
+├── docker-compose.yml
+├── .env.example
 └── README.md
 ```
 
- ### Some directories contain placeholders to demonstrate layered architecture intent.
-### Core logic is implemented in app.js for clarity and evaluation transparency.
+## Setup Instructions
 
- ## 5. Data Model Design
+### Prerequisites
 
-### Account
+- Node.js 18+
+- npm
+- PostgreSQL 15+
+- Docker + Docker Compose (optional)
 
-  - Unique identifier
+### Installation
 
-  - User association
-
-  - Account type (CHECKING, SAVINGS, etc.)
-
-  - Currency
-
-  - Status (ACTIVE / FROZEN)
-
-  - No balance column
-
-### Transaction
-
-  - Represents intent (DEPOSIT, WITHDRAWAL, TRANSFER)
-
-  - Source & destination accounts (when applicable)
-
-  - Amount, currency, status, description
-
-### Ledger Entry
-
-  - Immutable debit or credit record
-
-  - Linked to both account and transaction
-
-  - Append-only (never updated or deleted)
-
-### 6. API Endpoints
- ### Accounts
 ```bash
-Method	Endpoint	Description
-POST	/accounts	Create a new account
-GET	/accounts/:id	Get account details with calculated balance
-GET	/accounts/:id/ledger	Fetch immutable ledger history
+npm install
 ```
+
+### Environment Variables
+
+Create `.env` from `.env.example`.
+
+```bash
+copy .env.example .env
+```
+
+Required variables:
+
+- `DB_HOST`: PostgreSQL host
+- `DB_USER`: PostgreSQL user
+- `DB_PASSWORD`: PostgreSQL password
+- `DB_NAME`: database name
+
+Optional variables:
+
+- `PORT` (default `3000`)
+- `NODE_ENV` (controls development stack traces)
+
+### Running Locally
+
+1. Create/start PostgreSQL database (`ledger_db`).
+2. Apply schema:
+
+```bash
+psql -U postgres -d ledger_db -f docker/init.sql
+```
+
+3. Start API:
+
+```bash
+npm start
+```
+
+Server URL: `http://localhost:3000`
+
+### Running with Docker
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+- API: `http://localhost:3000`
+- PostgreSQL: `localhost:5432`
+
+Note: `Dockerfile` currently starts `src/app.js`. Production bootstrap is in `src/server.js`.
+
+## API Overview
+
+### Health
+
+- `GET /health` -> returns `{ status, timestamp }`
+
+### Accounts
+
+- `POST /accounts` -> create account
+- `GET /accounts/:id` -> account details with computed balance
+- `GET /accounts/:id/ledger` -> ledger entries for account
+
 ### Transactions
 
+- `POST /deposits` -> credit account
+- `POST /withdrawals` -> debit account (insufficient funds returns `422`)
+- `POST /transfers` -> move funds between two accounts
+
+## Verification Steps
+
+Run automated tests:
+
 ```bash
-Method	Endpoint	Description
-POST	/deposits	Deposit funds (CREDIT)
-POST	/withdrawals	Withdraw funds (DEBIT)
-POST	/transfers	Internal transfer (DEBIT + CREDIT)
-```
-### 7. Double-Entry Bookkeeping Implementation
-
-  - Every transfer creates exactly two ledger entries:
- 
-     - DEBIT from source account
-
-     - CREDIT to destination account
-
-  - Both entries share the same transaction ID
-
-  - Net balance change across the system is zero
-
-  - This ensures strict accounting correctness and traceability.
-
-### 8. Balance Calculation & Overdraft Prevention
-
-  - Balances are calculated dynamically as:
-
-    ```SUM(CREDITS) − SUM(DEBITS)```
-
-
-#### Before any debit:
-
-  -  Current balance is calculated from the ledger
-
-  - If result would be negative → transaction is rejected
-
-#### Insufficient funds return:
-
-  ```HTTP 422 Unprocessable Entity```
-
-### 9. ACID Transactions & Concurrency Handling
-
- All financial operations are wrapped in a single database transaction
-
- Uses:
-
-   - BEGIN
-
-   - COMMIT
-
-   - ROLLBACK
-
-Row-level locks ```(SELECT ... FOR UPDATE)``` prevent:
-
-   - Double spending
-
-   - Race conditions
-
-   - Lost updates
-
-### 10. Transaction Isolation Level
-
-  The system relies on PostgreSQL’s default READ COMMITTED isolation level, combined with explicit row-level locking.
-
-  This prevents dirty reads while maintaining good performance under concurrent access.
-
-### 11. Docker Setup 
-
-The application can be run in a fully reproducible Docker environment.
-
-  - Prerequisites
-
-    - Docker
-
-    - Docker Compose
-
-Start the application
-```
-docker-compose up --build
-```
-#### Services
-
-   - API: http://localhost:3000
-
-   - PostgreSQL: localhost:5432
-
-### Database Initialization
-
- - Schema is automatically created on first run using:
-```
- docker/init.sql
+npm test
 ```
 
-  - No manual SQL execution is required.
+Manual checks:
 
-### 12. Manual API Testing
+1. Health
 
-A Postman collection is included to test:
-
- - Account creation
-
- - Deposits
-
- - Withdrawals
-
- - Transfers
-
- - Ledger inspection
-
- - Overdraft prevention
-
- ### 13. Architecture Overview
- ```bash
-Client (Postman)
-      ↓
-Express API
-      ↓
-Business Logic (Transactions)
-      ↓
-PostgreSQL
- ├── accounts
- ├── transactions
- └── ledger_entries
-```
- ### 14. Database Relationship (ERD – Logical)
 ```bash
-accounts (1) ────< ledger_entries >──── (1) transactions
+curl -s http://localhost:3000/health
 ```
-- One account → many ledger entries
 
-- One transaction → multiple ledger entries
+2. Create account
+
+```bash
+curl -s -X POST http://localhost:3000/accounts \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"123e4567-e89b-12d3-a456-426614174000\",\"accountType\":\"CHECKING\",\"currency\":\"USD\"}"
+```
+
+3. Deposit
+
+```bash
+curl -s -X POST http://localhost:3000/deposits \
+  -H "Content-Type: application/json" \
+  -d "{\"accountId\":\"<ACCOUNT_ID>\",\"amount\":100.00,\"description\":\"initial\"}"
+```
+
+4. Overdraft rejection
+
+```bash
+curl -s -X POST http://localhost:3000/withdrawals \
+  -H "Content-Type: application/json" \
+  -d "{\"accountId\":\"<ACCOUNT_ID>\",\"amount\":999999}"
+```
+
+Expected result: `422` with `Insufficient funds`.
+
+## Deployment Notes
+
+- Containerization is available via `Dockerfile` and `docker-compose.yml`.
+- Database schema is initialized in containers from `docker/init.sql`.
+- For non-container execution, use `npm start` (`src/server.js`).
+- Before production deployment, align container startup command with `src/server.js` and add health/readiness checks in your orchestrator.
